@@ -34,7 +34,7 @@ import datetime
 import argparse
 import yaml
 
-summary = '/home/rwo/tmp/last_run_summary.yaml'
+summary = '/var/lib/puppet/state/last_run_summary.yaml'
 
 def ok(message):
     print 'OK: %s' % message
