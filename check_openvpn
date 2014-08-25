@@ -49,8 +49,7 @@ def checkserver(host,port,proto):
     ovpn_sock.settimeout(5)
 
     try:
-        ovpn_sock.connect((host, port))
-        ovpn_sock.sendto(byte_stream, (host, port))
+        ovpn_sock.sendto(byte_stream,(host,port))
         data, addr = ovpn_sock.recvfrom(1024) # buffer size is 1024 bytes
         reply = binascii.hexlify(data)
         if proto:
