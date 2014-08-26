@@ -8,6 +8,7 @@ The usage of the checks depends on what kind of checks they are:
 * normal checks must be run on the monitoring server
 
 ## How to use check_openvpn
+The plugin is a normal check which must be run on the monitoring server. It queries the target OpenVPN server and outputs OK, etc.
 ```
 $ python check_openvpn --help
 usage: check_openvpn [-h] [-p PORT] [-t] host
@@ -22,6 +23,7 @@ optional arguments:
 ```
 
 ## How to use check_puppetagent
+The plugin is an NRPE check and needs to be run on the monitoring client, thus the client which Puppetagent needs to be monitored.
 ```
 $ python check_puppetagent --help
 usage: check_puppetagent [-h] [-w WARN] [-c CRIT]
