@@ -83,7 +83,7 @@ def optionsparser():
 
     if not os.path.isfile(summary):
         # Should perhaps be CRIT
-        warn('Puppet has never run, no %s found.' % summary)
+        warning('Puppet has never run, no %s found.' % summary)
 
     return warn_seconds,crit_seconds
 
