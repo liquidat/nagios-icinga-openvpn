@@ -110,7 +110,10 @@ def getyamlfile(summary):
 def main():
     warn_seconds,crit_seconds = optionsparser()
     yaml_map = getyamlfile(summary)
-
+ 
+    if yaml_map["resources"]["out_of_sync"] > 0:
+	critical('Puppet status file lists %d out of sync resource(s)' % yaml_map["resources"]["out_of_sync"])
+	
     # Check last_run time on summary file
     now = datetime.datetime.now()
     lastruntime = datetime.datetime.fromtimestamp(int(yaml_map["time"]["last_run"]))
