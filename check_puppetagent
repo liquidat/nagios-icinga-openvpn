@@ -110,6 +110,9 @@ def getyamlfile(summary):
 def main():
     warn_seconds,crit_seconds = optionsparser()
     yaml_map = getyamlfile(summary)
+
+    if yaml_map["resources"]["failed"] > 0:
+	critical('Puppet status file lists %d failed resource(s)' % yaml_map["resources"]["failed"])
  
     if yaml_map["resources"]["out_of_sync"] > 0:
 	critical('Puppet status file lists %d out of sync resource(s)' % yaml_map["resources"]["out_of_sync"])
