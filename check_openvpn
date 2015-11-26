@@ -2,7 +2,7 @@
 
 # Check if an OpenVPN server runs on a given UDP port.
 #
-# Copyright 2013 Roland Wolters, credativ GmbH
+# Copyright 2013 Roland Wolters
 #
 # Version 20151106
 #
