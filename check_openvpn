@@ -26,7 +26,6 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import os
-import sys
 import time
 import hmac
 import hashlib
@@ -35,118 +34,136 @@ import socket
 import argparse
 import binascii
 
-MAGIC_PACKET = "\x38\x01\x00\x00\x00\x00\x00\x00\x00"
 HMAC_CLIENT_KEY_START = 192
+BUFFER_SIZE = 1024
 
 def ok(msg):
-    print "OK: %s" % msg
-    sys.exit(0)
+    print 'OK: %s' % msg
+    return 0
 
 def critical(msg):
-    print "CRIT: %s" % msg
-    sys.exit(2)
+    print 'CRIT: %s' % msg
+    return 2
 
-def buildpacket(key, digestmod):
-    if not key: return MAGIC_PACKET
-    
+def buildpacket(tcp, key, digestmod):
     packet = 1
     ts = int(time.time())
     session = os.urandom(8)
-
-    # hmac
-    h = hmac.new(key, digestmod=digestmod)
-    h.update(struct.pack('>I', packet)) # packet id
-    h.update(struct.pack('>I', ts)) # net time
-    h.update('\x38') # type
-    h.update(session) # session id
-    h.update(struct.pack('>B', 0)) # message packet id array length
-    h.update(struct.pack('>I', 0)) # message packet id
-
+    
+    if key:
+        # hmac
+        h = hmac.new(key, digestmod=digestmod)
+        h.update(struct.pack('>I', packet)) # packet id
+        h.update(struct.pack('>I', ts)) # net time
+        h.update('\x38') # type
+        h.update(session) # session id
+        h.update(struct.pack('>B', 0)) # message packet id array length
+        h.update(struct.pack('>I', 0)) # message packet id
+    
     # packet
-    result = ""
+    result = ''
     result += '\x38' # type
     result += session # session id
-    result += h.digest() # hmac
+    if key: result += h.digest() # hmac
     result += struct.pack('>I', packet) # packet id
     result += struct.pack('>I', ts) # net time
     result += struct.pack('>B', 0) # message packet id array length
     result += struct.pack('>I', 0) # message packet id
+    if tcp: result = struct.pack('>H', len(result)) + result
     return result
 
-def checkserver(host, port, proto, timeout, key, digest):
-    byte_stream = buildpacket(key, digest)
+def checkserver(host, port, tcp, timeout, key, digest):
+    packet = buildpacket(tcp, key, digest)
+    if tcp: checkserver_tcp(host, port, timeout, packet)
+    else: checkserver_udp(host, port, timeout, packet)
 
-    if proto: s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    else: s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+def checkserver_udp(host, port, timeout, packet):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(timeout)
-
+    
     try:
-        s.sendto(byte_stream,(host,port))
-        data, _ = s.recvfrom(1024) # buffer size is 1024 bytes
+        s.sendto(packet, (host, port))
+        data, _ = s.recvfrom(BUFFER_SIZE)
         reply = binascii.hexlify(data)
+        return ok('OpenVPN UDP server response (hex): %s' % reply)
+    except:
+        return critical('OpenVPN UDP server not responding')
+    finally:
+        s.close()
 
-        if proto: ok("OpenVPN tcp port reachable.")
-        else: ok("OpenVPN server response (hex): %s" % reply)
-    except socket.timeout:
-        critical("Request timed out")
-    except (socket.error, Exception):
-        critical("OpenVPN server not responding")
+def checkserver_tcp(host, port, timeout, packet):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    
+    try:
+        s.connect((host, port))
+        s.send(packet)
+        data = s.recv(BUFFER_SIZE)
+        if len(data) <= 0: raise RuntimeError
+        reply = binascii.hexlify(data)
+        return ok('OpenVPN TCP server response (hex): %s' % reply)
+    except:
+        return critical('OpenVPN TCP server not responding')
+    finally:
+        s.close()
 
-    s.close()
-    return data
+def readkey(path):
+    key = None
+    try:
+        with open(path, 'r') as myfile: key = myfile.read()
+    except:
+        return None
+    index_start = key.find('-\n');
+    index_end = key.find('\n-', index_start);
+    if index_start < 0 or index_end < 0 or index_end <= index_start:
+        return None
+    index_start += 2
+    key = key[index_start:index_end].replace('\n', '').replace('\r', '')
+    return key
 
-def optionsparser():
+def optionsparser(args=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--port", help="set port number (default is %%default)", type=int, dest="port", default="1194")
-    parser.add_argument("-t", "--tcp", help="use tcp instead of udp", action="store_true")
-    parser.add_argument("--timeout", help="set timeout (default is %%default)", type=int, default="5")
-    parser.add_argument("--digest", help="set HMAC digest (default is %%default)", type=str, default="sha1")
-    parser.add_argument("--digest-size", help="set HMAC digest size", type=int)
-    parser.add_argument("--digest-key", help="set HMAC key", type=str, default=None)
-    parser.add_argument("--tls-auth", help="set tls-auth file", type=str, default=None)
-    parser.add_argument("host", type=str, help="the OpenVPN host name or ip")
-    return parser.parse_args()
+    parser.add_argument('-p', '--port', help='set port number (default is %%default)', type=int, dest='port', default='1194')
+    parser.add_argument('-t', '--tcp', help='use tcp instead of udp', action='store_true')
+    parser.add_argument('--timeout', help='set timeout (default is %%default)', type=int, default='5')
+    parser.add_argument('--digest', help='set HMAC digest (default is %%default)', type=str, default='sha1')
+    parser.add_argument('--digest-size', help='set HMAC digest size', type=int)
+    parser.add_argument('--digest-key', help='set HMAC key', type=str, default=None)
+    parser.add_argument('--tls-auth', help='set tls-auth file', type=str, default=None)
+    parser.add_argument('host', type=str, help='the OpenVPN host name or ip')
+    return parser.parse_args(args)
 
 def main():
     args = optionsparser()
-
+    
     if args.digest_size and args.digest_size < 0:
-        critical("digest size must be positive")
+        critical('digest size must be positive')
     if args.tls_auth and args.digest_key:
-        critical("--tls-auth cannot go with --digest-key")
-
+        critical('--tls-auth cannot go with --digest-key')
+    
     key = args.digest_key
     digest = args.digest
     digest_size = args.digest_size
-    
+        
     digest = digest.lower()
     if digest not in hashlib.algorithms:
-        critical("digest not available")
+        return critical('digest not available')
     try:
         digest = getattr(hashlib, digest)
         if not digest_size: digest_size = digest().digest_size
     except:
-        critical("digest creation failed")
-
+        return critical('digest creation failed')
+    
     if args.tls_auth:
-        key = None
-        try:
-            with open(args.tls_auth, "r") as myfile: key = myfile.read()
-        except:
-            critical("tls auth file cannot be read")
-        index_start = key.find("-\n");
-        index_end = key.find("\n-", index_start);
-        if index_start < 0 or index_end < 0 or index_end <= index_start:
-            critical("malformed tls auth file")
-        index_start += 2
-        key = key[index_start:index_end].replace("\n", "").replace("\r", "")
+        key = readkey(args.tls_auth)
+        if key == None: return critical('cannot read tls auth file')
         index_start = HMAC_CLIENT_KEY_START * 2
         index_end = (HMAC_CLIENT_KEY_START + digest_size) * 2
         key = key[index_start:index_end]
-
+    
     if key: key = binascii.unhexlify(key)
+    
+    return checkserver(args.host, args.port, args.tcp, args.timeout, key, digest)
 
-    checkserver(args.host, args.port, args.tcp, args.timeout, key, digest)
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
