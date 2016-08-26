@@ -136,10 +136,10 @@ def readkey(path):
 
 def optionsparser(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--port', help='set port number (default is 1194)', type=int, dest='port', default='1194')
+    parser.add_argument('-p', '--port', help='set port number (default is %(default)d)', type=int, dest='port', default=1194)
     parser.add_argument('-t', '--tcp', help='use tcp instead of udp', action='store_true')
-    parser.add_argument('--timeout', help='set timeout (default is 5)', type=int, default='5')
-    parser.add_argument('--digest', help='set HMAC digest (default is sha1)', type=str, default='sha1')
+    parser.add_argument('--timeout', help='set timeout (default is %(default)d)', type=int, default=5)
+    parser.add_argument('--digest', help='set HMAC digest (default is %(default)s)', type=str, default='sha1')
     parser.add_argument('--digest-size', help='set HMAC digest size', type=int)
     parser.add_argument('--digest-key', help='set HMAC key', type=str, default=None)
     parser.add_argument('--tls-auth', help='set tls-auth file', type=str, default=None)
