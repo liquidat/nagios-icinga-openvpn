@@ -26,6 +26,7 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import os
+import sys
 import time
 import hmac
 import hashlib
@@ -121,7 +122,7 @@ def readkey(path):
     key = key[index_start:index_end].replace('\n', '').replace('\r', '')
     return key
 
-def optionsparser(args=None):
+def optionsparser(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', help='set port number (default is %%default)', type=int, dest='port', default='1194')
     parser.add_argument('-t', '--tcp', help='use tcp instead of udp', action='store_true')
@@ -131,10 +132,10 @@ def optionsparser(args=None):
     parser.add_argument('--digest-key', help='set HMAC key', type=str, default=None)
     parser.add_argument('--tls-auth', help='set tls-auth file', type=str, default=None)
     parser.add_argument('host', type=str, help='the OpenVPN host name or ip')
-    return parser.parse_args(args)
+    return parser.parse_args(argv)
 
-def main():
-    args = optionsparser()
+def main(argv=None):
+    args = optionsparser(argv)
     
     if args.digest_size and args.digest_size < 0:
         critical('digest size must be positive')
@@ -166,4 +167,6 @@ def main():
     return checkserver(args.host, args.port, args.tcp, args.timeout, key, digest)
 
 if __name__ == '__main__':
-    main()
+    code = main()
+    sys.exit(code)
+
