@@ -74,8 +74,8 @@ def buildpacket(tcp, key, digestmod):
 
 def checkserver(host, port, tcp, timeout, key, digest):
     packet = buildpacket(tcp, key, digest)
-    if tcp: checkserver_tcp(host, port, timeout, packet)
-    else: checkserver_udp(host, port, timeout, packet)
+    check = checkserver_tcp if tcp else checkserver_udp
+    return check(host, port, timeout, packet)
 
 def checkserver_udp(host, port, timeout, packet):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
