@@ -1,4 +1,4 @@
-#! /usr/bin/python2
+#!/usr/bin/env python
 
 # Check if an OpenVPN server runs on a given UDP or TCP port.
 #
@@ -27,6 +27,7 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import os
+import sys
 import time
 import hmac
 import hashlib
@@ -75,10 +76,8 @@ def buildpacket(tcp, key, digestmod):
 
 def checkserver(host, port, tcp, timeout, key, digest):
     packet = buildpacket(tcp, key, digest)
-    if tcp:
-        checkserver_tcp(host, port, timeout, packet)
-    else:
-        checkserver_udp(host, port, timeout, packet)
+    check = checkserver_tcp if tcp else checkserver_udp
+    return check(host, port, timeout, packet)
 
 def checkserver_udp(host, port, timeout, packet):
     # thanks to glucas for the idea
@@ -135,20 +134,20 @@ def readkey(path):
     key = key[index_start:index_end].replace('\n', '').replace('\r', '')
     return key
 
-def optionsparser(args=None):
+def optionsparser(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--port', help='set port number (default is 1194)', type=int, dest='port', default='1194')
+    parser.add_argument('-p', '--port', help='set port number (default is %(default)d)', type=int, dest='port', default=1194)
     parser.add_argument('-t', '--tcp', help='use tcp instead of udp', action='store_true')
-    parser.add_argument('--timeout', help='set timeout (default is 5)', type=int, default='5')
-    parser.add_argument('--digest', help='set HMAC digest (default is sha1)', type=str, default='sha1')
+    parser.add_argument('--timeout', help='set timeout (default is %(default)d)', type=int, default=5)
+    parser.add_argument('--digest', help='set HMAC digest (default is %(default)s)', type=str, default='sha1')
     parser.add_argument('--digest-size', help='set HMAC digest size', type=int)
     parser.add_argument('--digest-key', help='set HMAC key', type=str, default=None)
     parser.add_argument('--tls-auth', help='set tls-auth file', type=str, default=None)
-    parser.add_argument('host', type=str, help='the OpenVPN host name or ip')
-    return parser.parse_args(args)
+    parser.add_argument('host', help='the OpenVPN host name or IP', type=str)
+    return parser.parse_args(argv)
 
-def main():
-    args = optionsparser()
+def main(argv=None):
+    args = optionsparser(argv)
     
     if args.digest_size and args.digest_size < 0:
         critical('digest size must be positive')
@@ -180,4 +179,6 @@ def main():
     return checkserver(args.host, args.port, args.tcp, args.timeout, key, digest)
 
 if __name__ == '__main__':
-    main()
+    code = main()
+    sys.exit(code)
+
