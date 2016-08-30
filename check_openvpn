@@ -143,7 +143,7 @@ def optionsparser(argv=None):
     parser.add_argument('--digest-size', help='set HMAC digest size', type=int)
     parser.add_argument('--digest-key', help='set HMAC key', type=str, default=None)
     parser.add_argument('--tls-auth', help='set tls-auth file', type=str, default=None)
-    parser.add_argument('host', type=str, help='the OpenVPN host name or ip')
+    parser.add_argument('host', type=str, help='the OpenVPN host name or IP')
     return parser.parse_args(argv)
 
 def main(argv=None):
