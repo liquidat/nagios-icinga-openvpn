@@ -39,32 +39,35 @@ import binascii
 HMAC_CLIENT_KEY_START = 192
 BUFFER_SIZE = 1024
 
+ALGORITHMS_AVAILABLE = hashlib.algorithms_available \
+    if hasattr(hashlib, "algorithms_available") else hashlib.algorithms
+
 def ok(msg):
-    print 'OK: %s' % msg
+    print('OK: %s' % msg)
     return 0
 
 def critical(msg):
-    print 'CRIT: %s' % msg
+    print('CRIT: %s' % msg)
     return 2
 
 def buildpacket(tcp, key, digestmod):
     packet = 1
     ts = int(time.time())
     session = os.urandom(8)
-    
+
     if key:
         # hmac
         h = hmac.new(key, digestmod=digestmod)
         h.update(struct.pack('>I', packet)) # packet id
         h.update(struct.pack('>I', ts)) # net time
-        h.update('\x38') # type
+        h.update(b'\x38') # type
         h.update(session) # session id
         h.update(struct.pack('>B', 0)) # message packet id array length
         h.update(struct.pack('>I', 0)) # message packet id
-    
+
     # packet
-    result = ''
-    result += '\x38' # type
+    result = b''
+    result += b'\x38' # type
     result += session # session id
     if key: result += h.digest() # hmac
     result += struct.pack('>I', packet) # packet id
@@ -136,49 +139,48 @@ def readkey(path):
 
 def optionsparser(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--port', help='set port number (default is %(default)d)', type=int, dest='port', default=1194)
+    parser.add_argument('-p', '--port', help='set port number (default is %(default)d)', type=int, default=1194)
     parser.add_argument('-t', '--tcp', help='use tcp instead of udp', action='store_true')
     parser.add_argument('--timeout', help='set timeout (default is %(default)d)', type=int, default=5)
-    parser.add_argument('--digest', help='set HMAC digest (default is %(default)s)', type=str, default='sha1')
+    parser.add_argument('--digest', help='set HMAC digest (default is "%(default)s")', default='sha1')
     parser.add_argument('--digest-size', help='set HMAC digest size', type=int)
-    parser.add_argument('--digest-key', help='set HMAC key', type=str, default=None)
-    parser.add_argument('--tls-auth', help='set tls-auth file', type=str, default=None)
-    parser.add_argument('host', help='the OpenVPN host name or IP', type=str)
+    parser.add_argument('--digest-key', help='set HMAC key')
+    parser.add_argument('--tls-auth', help='set tls-auth file')
+    parser.add_argument('host', help='the OpenVPN host name or IP')
     return parser.parse_args(argv)
 
 def main(argv=None):
     args = optionsparser(argv)
-    
+
     if args.digest_size and args.digest_size < 0:
         critical('digest size must be positive')
     if args.tls_auth and args.digest_key:
         critical('--tls-auth cannot go with --digest-key')
-    
+
     key = args.digest_key
     digest = args.digest
     digest_size = args.digest_size
-        
+
     digest = digest.lower()
-    if digest not in hashlib.algorithms:
+    if digest not in ALGORITHMS_AVAILABLE:
         return critical('digest not available')
     try:
         digest = getattr(hashlib, digest)
         if not digest_size: digest_size = digest().digest_size
     except:
         return critical('digest creation failed')
-    
+
     if args.tls_auth:
         key = readkey(args.tls_auth)
         if key == None: return critical('cannot read tls auth file')
         index_start = HMAC_CLIENT_KEY_START * 2
         index_end = (HMAC_CLIENT_KEY_START + digest_size) * 2
         key = key[index_start:index_end]
-    
+
     if key: key = binascii.unhexlify(key)
-    
+
     return checkserver(args.host, args.port, args.tcp, args.timeout, key, digest)
 
 if __name__ == '__main__':
     code = main()
     sys.exit(code)
-
