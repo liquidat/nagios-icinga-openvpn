@@ -77,12 +77,12 @@ def buildpacket(tcp, key, digestmod):
     if tcp: result = struct.pack('>H', len(result)) + result
     return result
 
-def checkserver(host, port, tcp, timeout, key, digest):
+def checkserver(host, port, tcp, timeout, key, digest, retrycount):
     packet = buildpacket(tcp, key, digest)
     check = checkserver_tcp if tcp else checkserver_udp
-    return check(host, port, timeout, packet)
+    return check(host, port, timeout, packet, retrycount)
 
-def checkserver_udp(host, port, timeout, packet):
+def checkserver_udp(host, port, timeout, packet, retrycount):
     # thanks to glucas for the idea
     try:
         af, socktype, proto, canonname, sa = socket.getaddrinfo(host, port, \
@@ -92,17 +92,27 @@ def checkserver_udp(host, port, timeout, packet):
     except socket.error:
         return critical('Unable to create UDP socket')
 
-    try:
-        s.sendto(packet, (host, port))
-        data, _ = s.recvfrom(BUFFER_SIZE)
-        reply = binascii.hexlify(data)
-        return ok('OpenVPN UDP server response (hex): %s' % reply)
-    except:
-        return critical('OpenVPN UDP server not responding')
-    finally:
-        s.close()
+    # Send up to 'retrycount' UDP packets with 'timeout' secs between each.
+    # Return ok after receiving first UDP reply packet, critical otherwise.
+    i = retrycount
+    while (i > 0):
+        i -= 1
+        try:
+            s.sendto(packet, (host, port))
+            data, _ = s.recvfrom(BUFFER_SIZE)
+            reply = binascii.hexlify(data)
+            s.close()
+            return ok('OpenVPN UDP server response (hex): %s' % reply)
+        except socket.timeout:
+            pass
+        except:
+            s.close()
+            return critical('UDP socket exception')
+    s.close()
+    return critical('OpenVPN UDP server not responding')
 
-def checkserver_tcp(host, port, timeout, packet):
+def checkserver_tcp(host, port, timeout, packet, retrycount):
+    # retrycount not used in tcp
     try:
         af, socktype, proto, canonname, sa = socket.getaddrinfo(host, port, \
             socket.AF_UNSPEC, socket.SOCK_STREAM)[0]
@@ -141,11 +151,12 @@ def optionsparser(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', help='set port number (default is %(default)d)', type=int, default=1194)
     parser.add_argument('-t', '--tcp', help='use tcp instead of udp', action='store_true')
-    parser.add_argument('--timeout', help='set timeout (default is %(default)d)', type=int, default=5)
+    parser.add_argument('--timeout', help='set timeout, for udp counted per packet (default is %(default)d)', type=int, default=5)
     parser.add_argument('--digest', help='set HMAC digest (default is "%(default)s")', default='sha1')
     parser.add_argument('--digest-size', help='set HMAC digest size', type=int)
     parser.add_argument('--digest-key', help='set HMAC key')
     parser.add_argument('--tls-auth', help='set tls-auth file')
+    parser.add_argument('--retrycount', help='number of udp retries before giving up (default is %(default)d)', type=int, default=1)
     parser.add_argument('host', help='the OpenVPN host name or IP')
     return parser.parse_args(argv)
 
@@ -154,6 +165,8 @@ def main(argv=None):
 
     if args.digest_size and args.digest_size < 0:
         critical('digest size must be positive')
+    if args.retrycount < 1:
+        critical('retry count must be positive')
     if args.tls_auth and args.digest_key:
         critical('--tls-auth cannot go with --digest-key')
 
@@ -179,7 +192,7 @@ def main(argv=None):
 
     if key: key = binascii.unhexlify(key)
 
-    return checkserver(args.host, args.port, args.tcp, args.timeout, key, digest)
+    return checkserver(args.host, args.port, args.tcp, args.timeout, key, digest, args.retrycount)
 
 if __name__ == '__main__':
     code = main()

@@ -11,21 +11,23 @@ The plugin is a normal check which must be run on the monitoring server. It quer
 $ python check_openvpn --help
 usage: check_openvpn [-h] [-p PORT] [-t] [--timeout TIMEOUT] [--digest DIGEST]
                      [--digest-size DIGEST_SIZE] [--digest-key DIGEST_KEY]
-                     [--tls-auth TLS_AUTH]
+                     [--tls-auth TLS_AUTH] [--retrycount RETRYCOUNT]
                      host
 
 positional arguments:
-  host                  the OpenVPN host name or ip
+  host                  the OpenVPN host name or IP
 
 optional arguments:
   -h, --help            show this help message and exit
   -p PORT, --port PORT  set port number (default is 1194)
   -t, --tcp             use tcp instead of udp
-  --timeout TIMEOUT     set timeout (default is 5)
-  --digest DIGEST       set HMAC digest (default is sha1)
+  --timeout TIMEOUT     set timeout, for udp counted per packet (default is 5)
+  --digest DIGEST       set HMAC digest (default is "sha1")
   --digest-size DIGEST_SIZE
                         set HMAC digest size
   --digest-key DIGEST_KEY
                         set HMAC key
   --tls-auth TLS_AUTH   set tls-auth file
+  --retrycount RETRYCOUNT
+                        number of udp retries before giving up (default is 1)
 ```
