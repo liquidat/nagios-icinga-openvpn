@@ -94,9 +94,7 @@ def checkserver_udp(host, port, timeout, packet, retrycount):
 
     # Send up to 'retrycount' UDP packets with 'timeout' secs between each.
     # Return ok after receiving first UDP reply packet, critical otherwise.
-    i = retrycount
-    while (i > 0):
-        i -= 1
+    for i in range(retrycount):
         try:
             s.sendto(packet, (host, port))
             data, _ = s.recvfrom(BUFFER_SIZE)
