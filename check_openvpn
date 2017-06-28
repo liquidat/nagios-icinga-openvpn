@@ -119,7 +119,7 @@ def validate_p_control_hard_reset_server_v2(packet, query_sid, digest, digest_si
 
     return True
 
-def check(host, port, tcp, timeout, digest, digest_size, client_key, server_key, validate):
+def check(host, port, tcp, timeout, digest, digest_size, client_key, server_key, retrycount, validate):
     sid = os.urandom(8) # session id
     packet = build_p_control_hard_reset_client_v2(sid, digest, client_key)
     query_server = query_tcp_server if tcp else query_udp_server
@@ -130,11 +130,14 @@ def check(host, port, tcp, timeout, digest, digest_size, client_key, server_key,
         return critical('Unable to create socket')
 
     try:
-        response = query_server(s, host, port, packet)
+        response = query_server(s, host, port, packet, retrycount)
     except:
         return critical('OpenVPN server not responding')
     finally:
         s.close()
+
+    if response is None:
+        return critical('OpenVPN server not responding')
 
     if not validate:
         response = binascii.hexlify(response)
@@ -152,13 +155,22 @@ def create_socket(host, port, tcp, timeout):
     s.settimeout(timeout)
     return s
 
-def query_udp_server(s, host, port, packet):
-    s.sendto(packet, (host, port))
-    # TODO: check response address
-    data, _ = s.recvfrom(BUFFER_SIZE)
-    return data
+def query_udp_server(s, host, port, packet, retrycount):
+    # Send up to 'retrycount' UDP packets with 'timeout' secs between each.
+    # Return data after receiving first UDP packet.
+    for i in range(retrycount):
+        try:
+            s.sendto(packet, (host, port))
+            # TODO: check response address
+            data, _ = s.recvfrom(BUFFER_SIZE)
+            return data
+        except socket.timeout:
+            pass
+        except:
+            return None
+    return None
 
-def query_tcp_server(s, host, port, packet):
+def query_tcp_server(s, host, port, packet, retrycount):
     s.connect((host, port))
     s.send(struct.pack('>H', len(packet)))
     s.send(packet)
@@ -186,14 +198,15 @@ def optionsparser(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', help='set port number (default is %(default)d)', type=int, default=1194)
     parser.add_argument('-t', '--tcp', help='use tcp instead of udp', action='store_true')
-    parser.add_argument('--timeout', help='set timeout (default is %(default)d)', type=int, default=5)
+    parser.add_argument('--timeout', help='set timeout, for udp counted per packet (default is %(default)d)', type=int, default=5)
     parser.add_argument('--digest', help='set digest algorithm (default is "%(default)s")', default='sha1')
     parser.add_argument('--digest-size', help='set HMAC digest size', type=int)
     parser.add_argument('--digest-key-client', help='set client HMAC key')
     parser.add_argument('--digest-key-server', help='set server HMAC key for packet validation')
     parser.add_argument('--tls-auth', help='set tls-auth file')
-    parser.add_argument('--tls-auth-inverse', help='set tls-auth file direction to inverse (1)', action='store_true')
     # TODO: direction argument (normal, inverse)
+    parser.add_argument('--tls-auth-inverse', help='set tls-auth file direction to inverse (1)', action='store_true')
+    parser.add_argument('--retrycount', help='number of udp retries before giving up (default is %(default)d)', type=int, default=1)
     parser.add_argument('--validate', help='validate response', action='store_true')
     parser.add_argument('host', help='the OpenVPN host name or IP')
     return parser.parse_args(argv)
@@ -203,6 +216,8 @@ def main(argv=None):
 
     if args.digest_size and args.digest_size < 0:
         critical('digest size must be positive')
+    if args.retrycount < 1:
+        critical('retry count must be positive')
     if args.tls_auth and (args.digest_key_client or args.digest_key_server):
         critical('--tls-auth cannot go with --digest-key')
 
@@ -236,7 +251,7 @@ def main(argv=None):
         client_key = client_key[:digest_size]
         server_key = server_key[:digest_size]
 
-    return check(args.host, args.port, args.tcp, args.timeout, digest, digest_size, client_key, server_key, args.validate)
+    return check(args.host, args.port, args.tcp, args.timeout, digest, digest_size, client_key, server_key, args.retrycount, args.validate)
 
 if __name__ == '__main__':
     code = main()
