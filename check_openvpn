@@ -38,6 +38,7 @@ import binascii
 
 P_CONTROL_HARD_RESET_CLIENT_V2 = 7
 P_CONTROL_HARD_RESET_SERVER_V2 = 8
+MAX_P_CONTROL_SIZE = 128 # TODO: adopt
 MAX_CIPHER_KEY_LENGTH = 64
 MAX_HMAC_KEY_LENGTH = 64
 BUFFER_SIZE = 1024
@@ -47,6 +48,10 @@ ALGORITHMS_AVAILABLE = hashlib.algorithms_available if hasattr(hashlib, "algorit
 def ok(msg):
     print('OK: %s' % msg)
     return 0
+
+def warning(msg):
+    print('WARN: %s' % msg)
+    return 1
 
 def critical(msg):
     print('CRIT: %s' % msg)
@@ -99,10 +104,10 @@ def validate_p_control_hard_reset_server_v2(packet, query_sid, digest, digest_si
     mpid = struct.unpack('>I', packet[:4])[0] # message packet id
 
     # validate packet
-    if pid != 1: return False
-    if rsid != query_sid: return False
-    if mpid != 0: return False
-    if ptype != P_CONTROL_HARD_RESET_SERVER_V2 << 3: return False
+    if pid != 1: return 1
+    if rsid != query_sid: return 1
+    if mpid != 0: return 1
+    if ptype != P_CONTROL_HARD_RESET_SERVER_V2 << 3: return 1
     if key:
         # generate hmac
         h = hmac.new(key, digestmod=digest)
@@ -115,9 +120,8 @@ def validate_p_control_hard_reset_server_v2(packet, query_sid, digest, digest_si
             h.update(struct.pack('>I', e)) # message packet id array element
         h.update(rsid) # remote session id
         h.update(struct.pack('>I', mpid)) # message packet id
-        if phmac != h.digest(): return False
-
-    return True
+        if phmac != h.digest(): return 2
+    return 0
 
 def check(host, port, tcp, timeout, digest, digest_size, client_key, server_key, retrycount, validate):
     sid = os.urandom(8) # session id
@@ -131,21 +135,24 @@ def check(host, port, tcp, timeout, digest, digest_size, client_key, server_key,
 
     try:
         response = query_server(s, host, port, packet, retrycount)
+    except RuntimeError:
+        return critical('Invalid response')
     except:
-        return critical('OpenVPN server not responding')
+        return critical('Not responding')
     finally:
         s.close()
 
     if response is None:
-        return critical('OpenVPN server not responding')
+        return critical('Not responding')
 
-    if not validate:
-        response = binascii.hexlify(response)
-        return ok('OpenVPN server responded')
-    if validate_p_control_hard_reset_server_v2(response, sid, digest, digest_size, server_key):
-        return ok('OpenVPN server response validated')
-    else:
-        return critical('Invalid response')
+    # for debugging purpose
+    # response = binascii.hexlify(response)
+    if not validate: return ok('Responded')
+    valid = validate_p_control_hard_reset_server_v2(response, sid, digest, digest_size, server_key)
+    if valid == 0 and server_key: return ok('Response validated, checked HMAC')
+    if valid == 0: return ok('Response validated')
+    if valid == 2: return warning('Invalid HMAC')
+    return critical('Invalid response')
 
 def create_socket(host, port, tcp, timeout):
     # thanks to glucas for the idea
@@ -167,14 +174,16 @@ def query_udp_server(s, host, port, packet, retrycount):
         except socket.timeout:
             pass
         except:
+            print "b"
             return None
     return None
 
 def query_tcp_server(s, host, port, packet, retrycount):
+    # ignore retrycount
     s.connect((host, port))
-    s.send(struct.pack('>H', len(packet)))
-    s.send(packet)
+    s.send(struct.pack('>H', len(packet)) + packet)
     length = struct.unpack('>H', s.recv(2))
+    if length > MAX_P_CONTROL_SIZE: raise RuntimeError
     data = s.recv(length)
     if len(data) != length: raise RuntimeError
     return data
@@ -198,7 +207,7 @@ def optionsparser(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', help='set port number (default is %(default)d)', type=int, default=1194)
     parser.add_argument('-t', '--tcp', help='use tcp instead of udp', action='store_true')
-    parser.add_argument('--timeout', help='set timeout, for udp counted per packet (default is %(default)d)', type=int, default=5)
+    parser.add_argument('--timeout', help='set timeout in seconds, for udp counted per packet (default is %(default)d)', type=int, default=2)
     parser.add_argument('--digest', help='set digest algorithm (default is "%(default)s")', default='sha1')
     parser.add_argument('--digest-size', help='set HMAC digest size', type=int)
     parser.add_argument('--digest-key-client', help='set client HMAC key')
@@ -206,8 +215,8 @@ def optionsparser(argv=None):
     parser.add_argument('--tls-auth', help='set tls-auth file')
     # TODO: direction argument (normal, inverse)
     parser.add_argument('--tls-auth-inverse', help='set tls-auth file direction to inverse (1)', action='store_true')
-    parser.add_argument('--retrycount', help='number of udp retries before giving up (default is %(default)d)', type=int, default=1)
-    parser.add_argument('--validate', help='validate response', action='store_true')
+    parser.add_argument('--retrycount', help='number of udp retries before giving up (default is %(default)d)', type=int, default=3)
+    parser.add_argument('--no-validation', help='do not validate response', action='store_true')
     parser.add_argument('host', help='the OpenVPN host name or IP')
     return parser.parse_args(argv)
 
@@ -221,8 +230,8 @@ def main(argv=None):
     if args.tls_auth and (args.digest_key_client or args.digest_key_server):
         critical('--tls-auth cannot go with --digest-key')
 
-    if args.digest_key_client: client_key = binascii.unhexlify(args.digest_key_client)
-    if args.digest_key_server: server_key = binascii.unhexlify(args.digest_key_server)
+    client_key = binascii.unhexlify(args.digest_key_client) if args.digest_key_client else None
+    server_key = binascii.unhexlify(args.digest_key_server) if args.digest_key_server else None
     digest = args.digest
     digest_size = args.digest_size
 
@@ -251,7 +260,7 @@ def main(argv=None):
         client_key = client_key[:digest_size]
         server_key = server_key[:digest_size]
 
-    return check(args.host, args.port, args.tcp, args.timeout, digest, digest_size, client_key, server_key, args.retrycount, args.validate)
+    return check(args.host, args.port, args.tcp, args.timeout, digest, digest_size, client_key, server_key, args.retrycount, not args.no_validation)
 
 if __name__ == '__main__':
     code = main()
