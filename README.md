@@ -14,7 +14,7 @@ usage: check_openvpn [-h] [-p PORT] [-t] [--timeout TIMEOUT] [--digest DIGEST]
                      [--digest-key-client DIGEST_KEY_CLIENT]
                      [--digest-key-server DIGEST_KEY_SERVER]
                      [--tls-auth TLS_AUTH] [--tls-auth-inverse]
-                     [--retrycount RETRYCOUNT] [--validate]
+                     [--retrycount RETRYCOUNT] [--no-validation]
                      host
 
 positional arguments:
@@ -24,7 +24,8 @@ optional arguments:
   -h, --help            show this help message and exit
   -p PORT, --port PORT  set port number (default is 1194)
   -t, --tcp             use tcp instead of udp
-  --timeout TIMEOUT     set timeout, for udp counted per packet (default is 5)
+  --timeout TIMEOUT     set timeout in seconds, for udp counted per packet
+                        (default is 2)
   --digest DIGEST       set digest algorithm (default is "sha1")
   --digest-size DIGEST_SIZE
                         set HMAC digest size
@@ -35,6 +36,6 @@ optional arguments:
   --tls-auth TLS_AUTH   set tls-auth file
   --tls-auth-inverse    set tls-auth file direction to inverse (1)
   --retrycount RETRYCOUNT
-                        number of udp retries before giving up (default is 1)
-  --validate            validate response
+                        number of udp retries before giving up (default is 3)
+  --no-validation       do not validate response
 ```
