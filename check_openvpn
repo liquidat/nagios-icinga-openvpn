@@ -2,10 +2,12 @@
 
 # Check if an OpenVPN server runs on a given UDP or TCP port.
 #
-# Copyright 2013 Roland Wolters
-# Copyright 2016 Alarig Le Lay
+# (C) 2013, Roland Wolters
 #
-# Version 20160803
+# Contributors:
+# - Andreas Stefl
+# - Alarig Le Lay
+# - Roland Wolters
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
