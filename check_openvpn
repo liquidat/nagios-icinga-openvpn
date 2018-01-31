@@ -91,7 +91,7 @@ def validate_p_control_hard_reset_server_v2(packet, query_sid, digest, digest_si
     if False: pass
     elif len(packet) - struct.unpack('>B', packet[9:10])[0] * 4 == 14: plen = 0 # type sid mpida mpid
     elif len(packet) - struct.unpack('>B', packet[9:10])[0] * 4 == 22: plen = 1 # type sid mpida rsid mpid
-    elif len(packet) - struct.unpack('>B', packet[37:38])[0] * 4 == 50: plen = 2 # type sid hmac pid ts mpida rsid mpid
+    elif len(packet) - struct.unpack('>B', packet[17+digest_size:18+digest_size])[0] * 4 == 30+digest_size: plen = 2 # type sid hmac pid ts mpida rsid mpid
     else: return 20
 
     # parse packet
